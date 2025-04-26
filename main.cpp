@@ -55,15 +55,13 @@ void setup_handler() {
 #else // Linux, macOS
     struct sigaction sa = {};
     sa.sa_sigaction = signal_handler;
-    sa.sa_flags = SA_SIGINFO;  // Removed SA_RESETHAND to keep handler installed
+    sa.sa_flags = SA_SIGINFO; 
     sigemptyset(&sa.sa_mask);
     
-    // Add all signals we want to handle to sa_mask
     sigaddset(&sa.sa_mask, SIGSEGV);
     sigaddset(&sa.sa_mask, SIGBUS);  // Add SIGBUS for macOS
     sigaddset(&sa.sa_mask, SIGILL);  // Illegal instruction
-    
-    // Install handlers for multiple signals
+
     if (sigaction(SIGSEGV, &sa, nullptr) == -1) {
         std::cerr << "Failed to set SIGSEGV handler: " << std::strerror(errno) << "\n";
         std::exit(EXIT_FAILURE);
@@ -125,12 +123,10 @@ void attempt_access(const char* test_name, int* base_ptr, uintptr_t offset, bool
     jmp_set = 1;
     if (sigsetjmp(jmp_env, 1) == 0) {
     #endif
-        // Attempt the access
         *target_ptr = 42;
         jmp_set = 0;
         std::cout << "Unexpected success: Wrote 42\n";
     } else {
-        // We got here via longjmp/siglongjmp after catching a signal
         jmp_set = 0;
         #ifdef _WIN32
         std::cerr << "Caught exception 0x" << std::hex << caught_signal
