@@ -19,7 +19,7 @@ jobs:
               os: windows-latest,
               cc: "cl", 
               cxx: "cl",
-              cmake_args: "-DUSE_MSVC=ON"
+              cmake_args: "-DUSE_SEH=ON"
             }
           - {
               name: "Windows MinGW", 
