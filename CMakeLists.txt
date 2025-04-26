@@ -15,7 +15,7 @@ add_executable(memory_access main.cpp)
 if(WIN32)
     target_compile_definitions(memory_access PRIVATE _CRT_SECURE_NO_WARNINGS)
     if(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-        target_compile_definitions(memory_access PRIVATE USE_SEH)
+        target_compile_definitions(memory_access PRIVATE USE_SEH=1)
         target_compile_options(memory_access PRIVATE /EHa)
     endif()
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -34,6 +34,6 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
     target_compile_options(memory_access PRIVATE
         /W4
         /Zi
-        /EHsc
+        /EHa
     )
 endif()

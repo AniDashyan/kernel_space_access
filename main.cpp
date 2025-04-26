@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <cstring>
 #include <iomanip>
+#include <csignal>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -11,15 +12,22 @@
 #endif
 #include <csetjmp>
 
-// Global jmp_buf for longjmp
+// Use jmp_buf for Windows, sigjmp_buf for Linux/macOS
+#ifdef _WIN32
 static jmp_buf jmp_env;
-static bool jmp_set = false;
+#else
+static sigjmp_buf jmp_env;
+#endif
+static volatile sig_atomic_t jmp_set = 0;
+static volatile sig_atomic_t caught_signal = 0;
+static volatile uintptr_t fault_address = 0;
 
 #ifdef _WIN32
 LONG WINAPI vectored_handler(EXCEPTION_POINTERS* ExceptionInfo) {
     DWORD code = ExceptionInfo->ExceptionRecord->ExceptionCode;
     if ((code == EXCEPTION_ACCESS_VIOLATION || code == EXCEPTION_STACK_OVERFLOW) && jmp_set) {
-        std::cerr << "Caught exception 0x" << std::hex << code << " in VEH\n";
+        fault_address = ExceptionInfo->ExceptionRecord->ExceptionInformation[1];
+        caught_signal = code;
         longjmp(jmp_env, 1);
     }
     std::cerr << "Unhandled exception 0x" << std::hex << code
@@ -30,15 +38,10 @@ LONG WINAPI vectored_handler(EXCEPTION_POINTERS* ExceptionInfo) {
 #else
 static void sigsegv_handler(int sig, siginfo_t* info, void*) {
     if (jmp_set) {
-        std::cerr << "Caught SIGSEGV (signal: " << sig << ") at address: 0x"
-                  << std::hex << std::setw(16) << std::setfill('0')
-                  << reinterpret_cast<uintptr_t>(info->si_addr) << "\n";
-        longjmp(jmp_env, 1);
+        fault_address = reinterpret_cast<uintptr_t>(info->si_addr);
+        caught_signal = sig;
+        siglongjmp(jmp_env, 1);
     }
-    std::cerr << "Unhandled SIGSEGV at address: 0x"
-              << std::hex << std::setw(16) << std::setfill('0')
-              << reinterpret_cast<uintptr_t>(info->si_addr)
-              << ", errno: " << errno << " (" << std::strerror(errno) << ")\n";
     _exit(EXIT_FAILURE);
 }
 #endif
@@ -51,7 +54,7 @@ void setup_handler() {
 #else // Linux, macOS
     struct sigaction sa = {};
     sa.sa_sigaction = sigsegv_handler;
-    sa.sa_flags = SA_SIGINFO;
+    sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
     sigemptyset(&sa.sa_mask);
     if (sigaction(SIGSEGV, &sa, nullptr) == -1) {
         std::cerr << "Failed to set SIGSEGV handler: " << std::strerror(errno) << "\n";
@@ -92,14 +95,27 @@ void attempt_access(const char* test_name, int* base_ptr, uintptr_t offset, bool
                   << "\nFlags: 0x" << record->ExceptionFlags << "\n";
     }
 #else // Signal/VEH for MinGW, Linux, macOS
+    caught_signal = 0;
+    fault_address = 0;
+    #ifdef _WIN32
     if (setjmp(jmp_env) == 0) {
-        jmp_set = true;
+    #else
+    if (sigsetjmp(jmp_env, 1) == 0) {
+    #endif
+        jmp_set = 1;
         *target_ptr = 42;
+        jmp_set = 0;
         std::cout << "Unexpected success: Wrote 42\n";
-        jmp_set = false;
     } else {
+        jmp_set = 0;
+        #ifdef _WIN32
+        std::cerr << "Caught exception 0x" << std::hex << caught_signal
+                  << " at address: 0x" << std::setw(16) << std::setfill('0') << fault_address << "\n";
+        #else
+        std::cerr << "Caught SIGSEGV (signal: " << caught_signal << ") at address: 0x"
+                  << std::hex << std::setw(16) << std::setfill('0') << fault_address << "\n";
+        #endif
         std::cout << "Caught exception\n";
-        jmp_set = false;
     }
 #endif
 
