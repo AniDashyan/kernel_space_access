@@ -26,25 +26,34 @@ jobs:
               os: windows-latest,
               cc: "gcc", 
               cxx: "g++",
-              cmake_args: "-DUSE_MINGW=ON"
             }
           - {
               name: "Ubuntu GCC", 
               os: ubuntu-latest,
               cc: "gcc", 
-              cxx: "g++"
+              cxx: "g++",
+              cmake_args: ""
             }
           - {
               name: "Ubuntu Clang", 
               os: ubuntu-latest,
               cc: "clang", 
-              cxx: "clang++"
+              cxx: "clang++",
+              cmake_args: ""
+            }
+          - {
+              name: "Ubuntu GCC No ASAN", 
+              os: ubuntu-latest,
+              cc: "gcc", 
+              cxx: "g++",
+              cmake_args: "-DENABLE_ASAN=OFF"
             }
           - {
               name: "macOS", 
               os: macos-latest,
               cc: "clang", 
-              cxx: "clang++"
+              cxx: "clang++",
+              cmake_args: ""
             }
 
     steps:
@@ -69,22 +78,12 @@ jobs:
     - name: Build
       run: cmake --build build --config Debug
 
-    - name: Test Fixed Array Mode
+    - name: Test
       working-directory: ${{ github.workspace }}/build
       shell: bash
       run: |
         if [[ "${{ runner.os }}" == "Windows" ]]; then
           ./Debug/memory_access.exe 
-        else
-          ./memory_access
-        fi
-
-    - name: Test Recursive Mode
-      working-directory: ${{ github.workspace }}/build
-      shell: bash
-      run: |
-        if [[ "${{ runner.os }}" == "Windows" ]]; then
-          ./Debug/memory_access.exe
         else
           ./memory_access
         fi
