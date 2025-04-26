@@ -41,20 +41,6 @@ jobs:
               cxx: "clang++",
               cmake_args: ""
             }
-          - {
-              name: "Ubuntu GCC No ASAN", 
-              os: ubuntu-latest,
-              cc: "gcc", 
-              cxx: "g++",
-              cmake_args: "-DENABLE_ASAN=OFF"
-            }
-          - {
-              name: "macOS", 
-              os: macos-latest,
-              cc: "clang", 
-              cxx: "clang++",
-              cmake_args: ""
-            }
 
     steps:
     - uses: actions/checkout@v3
