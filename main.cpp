@@ -94,7 +94,7 @@ void attempt_access(const char* test_name, int* base_ptr, uintptr_t offset, bool
                                     record->ExceptionInformation[0] == 1 ? "Write" : "Execute")
                   << "\nFlags: 0x" << record->ExceptionFlags << "\n";
     }
-#else // Signal/VEH for MinGW, Linux, macOS
+#else
     caught_signal = 0;
     fault_address = 0;
     #ifdef _WIN32
