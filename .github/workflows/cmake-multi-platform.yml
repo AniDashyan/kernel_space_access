@@ -74,9 +74,9 @@ jobs:
       shell: bash
       run: |
         if [[ "${{ runner.os }}" == "Windows" ]]; then
-          ./Debug/kernel_access.exe 
+          ./Debug/memory_access.exe 
         else
-          ./kernel_access
+          ./memory_access
         fi
 
     - name: Test Recursive Mode
@@ -84,7 +84,7 @@ jobs:
       shell: bash
       run: |
         if [[ "${{ runner.os }}" == "Windows" ]]; then
-          ./Debug/kernel_access.exe
+          ./Debug/memory_access.exe
         else
-          ./kernel_access
+          ./memory_access
         fi
