@@ -60,6 +60,15 @@ void setup_handler() {
 #endif
 }
 
+#ifdef USE_SEH
+int filter_exception(EXCEPTION_POINTERS* ep) {
+    if (ep->ExceptionRecord->ExceptionCode == EXCEPTION_ACCESS_VIOLATION) {
+        return EXCEPTION_EXECUTE_HANDLER;
+    }
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 void attempt_access(const char* test_name, int* base_ptr, uintptr_t offset, bool is_heap = false) {
     std::cout << "\n=== " << test_name << " ===\n";
     uintptr_t base_addr = reinterpret_cast<uintptr_t>(base_ptr);
@@ -69,12 +78,12 @@ void attempt_access(const char* test_name, int* base_ptr, uintptr_t offset, bool
               << "\nAttempting write to: 0x" << target_addr << "\n";
 
 #ifdef USE_SEH // SEH for MSVC
+    EXCEPTION_POINTERS* exception_info = nullptr;
     __try {
         *target_ptr = 42;
         std::cout << "Unexpected success: Wrote 42\n";
-    } __except (GetExceptionCode() == EXCEPTION_ACCESS_VIOLATION ?
-                EXCEPTION_EXECUTE_HANDLER : EXCEPTION_CONTINUE_SEARCH) {
-        EXCEPTION_RECORD* record = GetExceptionInformation()->ExceptionRecord;
+    } __except (exception_info = GetExceptionInformation(), filter_exception(exception_info)) {
+        EXCEPTION_RECORD* record = exception_info->ExceptionRecord;
         std::cerr << "Access Violation at: 0x" << std::hex << std::setw(16) << std::setfill('0')
                   << record->ExceptionAddress << "\n";
         std::cerr << "Attempted access: 0x" << record->ExceptionInformation[1]
@@ -111,7 +120,7 @@ int main() {
     int stack_array[10];
     attempt_access("Stack Out-of-Bounds Access", stack_array, 1000);
 
-    int* invalid_ptr = reinterpret_cast<int*>(0xDEADBEEF);
+    int* invalid_ptr = reinterpret_cast<int*>(static_cast<uintptr_t>(0xDEADBEEF));
     attempt_access("Invalid Address (0xDEADBEEF)", invalid_ptr, 0);
 
     std::cout << "\nAll test cases completed\n";
