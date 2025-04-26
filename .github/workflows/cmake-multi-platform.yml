@@ -1,0 +1,90 @@
+name: CMake on multiple platforms
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "Windows MSVC", 
+              os: windows-latest,
+              cc: "cl", 
+              cxx: "cl",
+              cmake_args: "-DUSE_MSVC=ON"
+            }
+          - {
+              name: "Windows MinGW", 
+              os: windows-latest,
+              cc: "gcc", 
+              cxx: "g++",
+              cmake_args: "-DUSE_MINGW=ON"
+            }
+          - {
+              name: "Ubuntu GCC", 
+              os: ubuntu-latest,
+              cc: "gcc", 
+              cxx: "g++"
+            }
+          - {
+              name: "Ubuntu Clang", 
+              os: ubuntu-latest,
+              cc: "clang", 
+              cxx: "clang++"
+            }
+          - {
+              name: "macOS", 
+              os: macos-latest,
+              cc: "clang", 
+              cxx: "clang++"
+            }
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set environment variables for Windows
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        if [[ "${{ matrix.config.cc }}" == "gcc" ]]; then
+          echo "Adding MinGW to PATH"
+          echo "C:/msys64/mingw64/bin" >> $GITHUB_PATH
+        fi
+
+    - name: Configure CMake
+      env:
+        CC: ${{ matrix.config.cc }}
+        CXX: ${{ matrix.config.cxx }}
+      run: |
+        cmake -S . -B build ${{ matrix.config.cmake_args }} -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build
+      run: cmake --build build --config Debug
+
+    - name: Test Fixed Array Mode
+      working-directory: ${{ github.workspace }}/build
+      shell: bash
+      run: |
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
+          ./Debug/kernel_access.exe 
+        else
+          ./kernel_access
+        fi
+
+    - name: Test Recursive Mode
+      working-directory: ${{ github.workspace }}/build
+      shell: bash
+      run: |
+        if [[ "${{ runner.os }}" == "Windows" ]]; then
+          ./Debug/kernel_access.exe
+        else
+          ./kernel_access
+        fi
