@@ -12,7 +12,7 @@
 #endif
 #include <csetjmp>
 
-// Use jmp_buf for Windows, sigjmp_buf for Linux/macOS
+// Use jmp_buf for Windows, sigjmp_buf for Linux
 #ifdef _WIN32
 static jmp_buf jmp_env;
 #else
@@ -52,29 +52,18 @@ void setup_handler() {
     #ifndef USE_SEH // MinGW-w64 uses VEH
     AddVectoredExceptionHandler(1, vectored_handler);
     #endif
-#else // Linux, macOS
+#else // Linux only
     struct sigaction sa = {};
     sa.sa_sigaction = signal_handler;
     sa.sa_flags = SA_SIGINFO; 
     sigemptyset(&sa.sa_mask);
     
+    // Add SIGSEGV to sa_mask
     sigaddset(&sa.sa_mask, SIGSEGV);
-    sigaddset(&sa.sa_mask, SIGBUS);  // Add SIGBUS for macOS
-    sigaddset(&sa.sa_mask, SIGILL);  // Illegal instruction
-
+    
+    // Install handler for SIGSEGV only
     if (sigaction(SIGSEGV, &sa, nullptr) == -1) {
         std::cerr << "Failed to set SIGSEGV handler: " << std::strerror(errno) << "\n";
-        std::exit(EXIT_FAILURE);
-    }
-    
-    // macOS often raises SIGBUS instead of SIGSEGV for memory access violations
-    if (sigaction(SIGBUS, &sa, nullptr) == -1) {
-        std::cerr << "Failed to set SIGBUS handler: " << std::strerror(errno) << "\n";
-        std::exit(EXIT_FAILURE);
-    }
-    
-    if (sigaction(SIGILL, &sa, nullptr) == -1) {
-        std::cerr << "Failed to set SIGILL handler: " << std::strerror(errno) << "\n";
         std::exit(EXIT_FAILURE);
     }
 #endif
@@ -132,12 +121,7 @@ void attempt_access(const char* test_name, int* base_ptr, uintptr_t offset, bool
         std::cerr << "Caught exception 0x" << std::hex << caught_signal
                   << " at address: 0x" << std::setw(16) << std::setfill('0') << fault_address << "\n";
         #else
-        const char* sig_name = "UNKNOWN";
-        if (caught_signal == SIGSEGV) sig_name = "SIGSEGV";
-        else if (caught_signal == SIGBUS) sig_name = "SIGBUS";
-        else if (caught_signal == SIGILL) sig_name = "SIGILL";
-        
-        std::cerr << "Caught signal " << caught_signal << " (" << sig_name << ") at address: 0x"
+        std::cerr << "Caught SIGSEGV (signal: " << caught_signal << ") at address: 0x"
                   << std::hex << std::setw(16) << std::setfill('0') << fault_address << "\n";
         #endif
         std::cout << "Caught exception\n";
