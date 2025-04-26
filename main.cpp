@@ -36,12 +36,13 @@ LONG WINAPI vectored_handler(EXCEPTION_POINTERS* ExceptionInfo) {
     _exit(EXIT_FAILURE);
 }
 #else
-static void sigsegv_handler(int sig, siginfo_t* info, void*) {
+static void signal_handler(int sig, siginfo_t* info, void*) {
     if (jmp_set) {
         fault_address = reinterpret_cast<uintptr_t>(info->si_addr);
         caught_signal = sig;
         siglongjmp(jmp_env, 1);
     }
+    std::cerr << "Unhandled signal " << sig << "\n";
     _exit(EXIT_FAILURE);
 }
 #endif
@@ -53,11 +54,29 @@ void setup_handler() {
     #endif
 #else // Linux, macOS
     struct sigaction sa = {};
-    sa.sa_sigaction = sigsegv_handler;
-    sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+    sa.sa_sigaction = signal_handler;
+    sa.sa_flags = SA_SIGINFO;  // Removed SA_RESETHAND to keep handler installed
     sigemptyset(&sa.sa_mask);
+    
+    // Add all signals we want to handle to sa_mask
+    sigaddset(&sa.sa_mask, SIGSEGV);
+    sigaddset(&sa.sa_mask, SIGBUS);  // Add SIGBUS for macOS
+    sigaddset(&sa.sa_mask, SIGILL);  // Illegal instruction
+    
+    // Install handlers for multiple signals
     if (sigaction(SIGSEGV, &sa, nullptr) == -1) {
         std::cerr << "Failed to set SIGSEGV handler: " << std::strerror(errno) << "\n";
+        std::exit(EXIT_FAILURE);
+    }
+    
+    // macOS often raises SIGBUS instead of SIGSEGV for memory access violations
+    if (sigaction(SIGBUS, &sa, nullptr) == -1) {
+        std::cerr << "Failed to set SIGBUS handler: " << std::strerror(errno) << "\n";
+        std::exit(EXIT_FAILURE);
+    }
+    
+    if (sigaction(SIGILL, &sa, nullptr) == -1) {
+        std::cerr << "Failed to set SIGILL handler: " << std::strerror(errno) << "\n";
         std::exit(EXIT_FAILURE);
     }
 #endif
@@ -97,22 +116,32 @@ void attempt_access(const char* test_name, int* base_ptr, uintptr_t offset, bool
 #else
     caught_signal = 0;
     fault_address = 0;
+    
+    // Set jmp_set before calling setjmp/sigsetjmp to avoid race conditions
     #ifdef _WIN32
+    jmp_set = 1;
     if (setjmp(jmp_env) == 0) {
     #else
+    jmp_set = 1;
     if (sigsetjmp(jmp_env, 1) == 0) {
     #endif
-        jmp_set = 1;
+        // Attempt the access
         *target_ptr = 42;
         jmp_set = 0;
         std::cout << "Unexpected success: Wrote 42\n";
     } else {
+        // We got here via longjmp/siglongjmp after catching a signal
         jmp_set = 0;
         #ifdef _WIN32
         std::cerr << "Caught exception 0x" << std::hex << caught_signal
                   << " at address: 0x" << std::setw(16) << std::setfill('0') << fault_address << "\n";
         #else
-        std::cerr << "Caught SIGSEGV (signal: " << caught_signal << ") at address: 0x"
+        const char* sig_name = "UNKNOWN";
+        if (caught_signal == SIGSEGV) sig_name = "SIGSEGV";
+        else if (caught_signal == SIGBUS) sig_name = "SIGBUS";
+        else if (caught_signal == SIGILL) sig_name = "SIGILL";
+        
+        std::cerr << "Caught signal " << caught_signal << " (" << sig_name << ") at address: 0x"
                   << std::hex << std::setw(16) << std::setfill('0') << fault_address << "\n";
         #endif
         std::cout << "Caught exception\n";
